@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #f8f9fa;
+    color: #1e293b;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+}
+
+/* Geometric Dot Grid Texture */
+.bg-grid-dots {
+  background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.bg-grid-dots-dark {
+  background-image: radial-gradient(#475569 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Custom Leaflet Marker Fixes */
+.custom-leaflet-marker {
+  background: transparent;
+  border: none;
+}
