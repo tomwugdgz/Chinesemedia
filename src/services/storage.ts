@@ -1,4 +1,4 @@
-import { Point, Customer, Plan, PointStatus, MediaPhoto, VoiceNote, InspectionRecord } from '../types';
+import { Point, Customer, Plan, PointStatus, MediaPhoto, VoiceNote, InspectionRecord, SystemSettings, PendingReminderItem } from '../types';
 import { INITIAL_POINTS } from '../data/initialPoints';
 import { INITIAL_CUSTOMERS } from '../data/initialCustomers';
 import { INITIAL_PLANS } from '../data/initialPlans';
@@ -7,7 +7,20 @@ const STORAGE_KEYS = {
   POINTS: 'pdgl_points_v2',
   CUSTOMERS: 'pdgl_customers_v2',
   PLANS: 'pdgl_plans_v2',
-  BACKUP_TIMESTAMP: 'pdgl_backup_ts_v2'
+  BACKUP_TIMESTAMP: 'pdgl_backup_ts_v2',
+  SETTINGS: 'pdgl_settings_v2'
+};
+
+const DEFAULT_SETTINGS: SystemSettings = {
+  lockExpireThresholdDays: 3,
+  inspectionOverdueDays: 14,
+  customerProtectionThresholdDays: 15,
+  enableDashboardPopupAlert: true,
+  autoDismissForToday: false,
+  aiDefaultCity: '广州',
+  aiDefaultTargetCount: 5,
+  aiDefaultBudget: 30000,
+  aiIndustryPreference: '快消品与社区生活'
 };
 
 // 安全读取 localStorage
@@ -423,14 +436,138 @@ export const StorageService = {
     }
   },
 
+  // 获取与保存系统配置
+  getSettings(): SystemSettings {
+    const data = getLocalItem<SystemSettings>(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+    return { ...DEFAULT_SETTINGS, ...data };
+  },
+
+  saveSettings(settings: SystemSettings): void {
+    setLocalItem(STORAGE_KEYS.SETTINGS, settings);
+  },
+
+  // 扫描即将到期、待补拍巡检、客户保护期等待办事项
+  getPendingReminders(): PendingReminderItem[] {
+    const settings = this.getSettings();
+    const plans = this.getPlans();
+    const points = this.getPoints();
+    const customers = this.getCustomers();
+    const reminders: PendingReminderItem[] = [];
+
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const todayMs = new Date(todayStr).getTime();
+
+    // 1. 扫描锁定即将到期的投放计划
+    plans.forEach(plan => {
+      if (plan.status === '已锁' && plan.lockExpireDate) {
+        const expireMs = new Date(plan.lockExpireDate).getTime();
+        const diffDays = Math.ceil((expireMs - todayMs) / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= settings.lockExpireThresholdDays) {
+          reminders.push({
+            id: `rem-lock-${plan.id}`,
+            type: 'lock_expiring',
+            title: `锁单即将到期:《${plan.name}》`,
+            subtitle: diffDays < 0 
+              ? `已逾期 ${Math.abs(diffDays)} 天，请尽快转为发布或释放占位` 
+              : diffDays === 0 
+              ? `今日到期！请及时确认是否转为正式发布上画` 
+              : `剩余 ${diffDays} 天到期 (到期日: ${plan.lockExpireDate})`,
+            urgency: diffDays <= 1 ? 'high' : 'medium',
+            daysLeft: diffDays,
+            targetId: plan.id,
+            targetType: 'plan',
+            dateStr: plan.lockExpireDate
+          });
+        }
+      }
+    });
+
+    // 2. 扫描已发布但缺失巡检/完工留证照片的点位，或巡检超期的点位
+    points.forEach(point => {
+      if (point.status === '已发布') {
+        const photosCount = (point.photos || []).length;
+        const inspectionsCount = (point.inspections || []).length;
+        
+        if (photosCount === 0 && inspectionsCount === 0) {
+          reminders.push({
+            id: `rem-insp-none-${point.id}`,
+            type: 'inspection_missing',
+            title: `待补拍上画完工照:【${point.project}】`,
+            subtitle: `${point.city}${point.area} · 暂无任何上画完工或现场巡检记录照片`,
+            urgency: 'high',
+            targetId: point.id,
+            targetType: 'point'
+          });
+        } else {
+          // 检查最新巡检日期是否超过设定阈值
+          const latestInspection = point.inspections?.[0];
+          if (latestInspection && latestInspection.timestamp) {
+            const inspMs = new Date(latestInspection.timestamp.slice(0, 10)).getTime();
+            const daysSinceInsp = Math.floor((todayMs - inspMs) / (1000 * 60 * 60 * 24));
+            if (daysSinceInsp >= settings.inspectionOverdueDays) {
+              reminders.push({
+                id: `rem-insp-overdue-${point.id}`,
+                type: 'inspection_missing',
+                title: `巡检超期待复检:【${point.project}】`,
+                subtitle: `距离上次巡检已过 ${daysSinceInsp} 天 (阈值: ${settings.inspectionOverdueDays}天)`,
+                urgency: 'medium',
+                targetId: point.id,
+                targetType: 'point'
+              });
+            }
+          }
+        }
+      }
+    });
+
+    // 3. 扫描B类客户保护期即将到期
+    customers.forEach(cust => {
+      if (cust.classification === 'B类' && cust.protectionExpireDate) {
+        const expireMs = new Date(cust.protectionExpireDate).getTime();
+        const diffDays = Math.ceil((expireMs - todayMs) / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= settings.customerProtectionThresholdDays) {
+          reminders.push({
+            id: `rem-cust-${cust.id}`,
+            type: 'customer_protection',
+            title: `B类客户保护期预警:【${cust.name}】`,
+            subtitle: diffDays <= 0 
+              ? `保护期已届满，若无跟进将自动流入公海` 
+              : `保护期剩余 ${diffDays} 天 (保护截止: ${cust.protectionExpireDate})`,
+            urgency: diffDays <= 3 ? 'high' : 'low',
+            daysLeft: diffDays,
+            targetId: cust.id,
+            targetType: 'customer',
+            dateStr: cust.protectionExpireDate
+          });
+        }
+      }
+    });
+
+    // 按紧急程度和剩余天数排序
+    const urgencyWeight = { high: 3, medium: 2, low: 1 };
+    reminders.sort((a, b) => {
+      if (urgencyWeight[b.urgency] !== urgencyWeight[a.urgency]) {
+        return urgencyWeight[b.urgency] - urgencyWeight[a.urgency];
+      }
+      return (a.daysLeft ?? 999) - (b.daysLeft ?? 999);
+    });
+
+    return reminders;
+  },
+
   // 恢复出厂初始数据
   resetToDefault(): void {
     localStorage.removeItem(STORAGE_KEYS.POINTS);
     localStorage.removeItem(STORAGE_KEYS.CUSTOMERS);
     localStorage.removeItem(STORAGE_KEYS.PLANS);
     localStorage.removeItem(STORAGE_KEYS.BACKUP_TIMESTAMP);
+    localStorage.removeItem(STORAGE_KEYS.SETTINGS);
     setLocalItem(STORAGE_KEYS.POINTS, INITIAL_POINTS);
     setLocalItem(STORAGE_KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
     setLocalItem(STORAGE_KEYS.PLANS, INITIAL_PLANS);
+    setLocalItem(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
   }
 };

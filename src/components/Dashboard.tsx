@@ -3,7 +3,8 @@ import {
   Point, 
   Customer, 
   Plan, 
-  MediaPhoto 
+  MediaPhoto,
+  PendingReminderItem
 } from '../types';
 import { 
   Layers, 
@@ -20,27 +21,41 @@ import {
   Building,
   Plus,
   ShieldCheck,
-  Radio
+  Radio,
+  Sparkles,
+  BellRing,
+  AlertTriangle,
+  Clock,
+  Settings,
+  Bot
 } from 'lucide-react';
 
 interface DashboardProps {
   points: Point[];
   customers: Customer[];
   plans: Plan[];
+  pendingReminders?: PendingReminderItem[];
   onNavigate: (tab: string) => void;
   onSelectPoint: (point: Point) => void;
   onSelectPlan: (plan: Plan) => void;
   onQuickInspect: () => void;
+  onOpenRemindersModal?: () => void;
+  onOpenAISmartPlanner?: (tab?: 'select' | 'plan' | 'chat') => void;
+  onOpenSettings?: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
   points,
   customers,
   plans,
+  pendingReminders = [],
   onNavigate,
   onSelectPoint,
   onSelectPlan,
-  onQuickInspect
+  onQuickInspect,
+  onOpenRemindersModal,
+  onOpenAISmartPlanner,
+  onOpenSettings
 }) => {
   // 统计指标
   const totalPoints = points.length;
@@ -56,6 +71,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const elevatorPoints = points.filter(p => p.mediaType === '电梯框架').length;
   const unitDoorPoints = points.filter(p => p.mediaType === '单元门智能框架').length;
+
+  // 待办统计
+  const highUrgencyReminders = pendingReminders.filter(r => r.urgency === 'high');
+  const lockReminders = pendingReminders.filter(r => r.type === 'lock_expiring');
+  const inspectionReminders = pendingReminders.filter(r => r.type === 'inspection_missing');
 
   // 城市分布统计
   const cityStats = points.reduce((acc, p) => {
@@ -82,6 +102,53 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6 pb-12">
+      {/* 待办事项预警提示横幅 */}
+      {pendingReminders.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200/90 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in duration-200">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0">
+              <BellRing className="w-4 h-4 animate-bounce" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="flex items-center space-x-2">
+                <span className="font-bold text-sm text-slate-900">
+                  业务待办提醒 ({pendingReminders.length} 项)
+                </span>
+                {highUrgencyReminders.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-bold">
+                    {highUrgencyReminders.length} 项需加急
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600">
+                {lockReminders.length > 0 && `包含 ${lockReminders.length} 个即将到期的锁定计划 · `}
+                {inspectionReminders.length > 0 && `包含 ${inspectionReminders.length} 个待拍照巡检点位`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 shrink-0">
+            {onOpenSettings && (
+              <button
+                onClick={onOpenSettings}
+                className="text-xs text-slate-500 hover:text-slate-700 font-semibold px-2 py-1"
+              >
+                配置阈值
+              </button>
+            )}
+            {onOpenRemindersModal && (
+              <button
+                onClick={onOpenRemindersModal}
+                className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors"
+              >
+                <span>立即查看并处理</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 顶部系统欢迎条与快速工作流行动 */}
       <div className="bg-slate-900 rounded-xl p-6 text-white shadow-sm border border-slate-800 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative overflow-hidden">
         {/* Subtle geometric dot grid pattern */}
@@ -89,18 +156,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="space-y-2 relative z-10">
           <div className="inline-flex items-center space-x-2 px-2.5 py-1 rounded bg-indigo-950/80 text-indigo-300 text-xs font-semibold border border-indigo-700/60 uppercase tracking-wider">
             <Radio className="w-3.5 h-3.5 animate-pulse text-indigo-400" />
-            <span>户外社区媒体投放管理系统 · 离线全就绪</span>
+            <span>户外社区媒体投放管理系统 · AI 智选与离线全就绪</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
             点位资源监控与投放工作流总览
           </h1>
           <p className="text-slate-300 text-sm max-w-2xl">
-            严格按照「选点 → 锁点 → 发布」标准作业流程驱动，内置全国核心城市高价值电梯框架与单元门智能媒体点位，支持高精地理空间标绘与现场多媒体存证。
+            严格按照「选点 → 锁点 → 发布」标准作业流程驱动，内置全国核心城市高价值电梯框架与单元门智能媒体点位，集成 Gemini 3.7 AI 智能选点与方案定制。
           </p>
         </div>
 
         {/* 快捷操作栏 */}
         <div className="flex flex-wrap items-center gap-3 relative z-10">
+          {onOpenAISmartPlanner && (
+            <button
+              id="dashboard-ai-planner-btn"
+              onClick={() => onOpenAISmartPlanner('select')}
+              className="flex items-center space-x-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:opacity-90 text-white font-bold text-sm shadow-md shadow-indigo-600/30 transition-all"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+              <span>AI 智能选点</span>
+            </button>
+          )}
+
           <button
             id="dashboard-new-plan-btn"
             onClick={() => onNavigate('plans')}

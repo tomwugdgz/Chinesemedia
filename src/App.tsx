@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StorageService } from './services/storage';
-import { Point, Plan, Customer, MediaPhoto, VoiceNote, InspectionRecord, PointStatus } from './types';
+import { Point, Plan, Customer, MediaPhoto, VoiceNote, InspectionRecord, PointStatus, PendingReminderItem, SystemSettings } from './types';
 import { Navbar } from './components/Navbar';
 import { Dashboard } from './components/Dashboard';
 import { PointMapView } from './components/PointMapView';
@@ -12,12 +12,16 @@ import { ReleaseNoticeModal } from './components/ReleaseNoticeModal';
 import { FieldInspectionModal } from './components/FieldInspectionModal';
 import { DataBackupModal } from './components/DataBackupModal';
 import { PointImportExportModal } from './components/PointImportExportModal';
+import { SystemSettingsModal } from './components/SystemSettingsModal';
+import { DashboardReminderModal } from './components/DashboardReminderModal';
+import { AISmartPlannerModal } from './components/AISmartPlannerModal';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'map' | 'points' | 'plans' | 'customers'>('dashboard');
   const [points, setPoints] = useState<Point[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [pendingReminders, setPendingReminders] = useState<PendingReminderItem[]>([]);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
 
   // 弹窗状态
@@ -26,16 +30,45 @@ export function App() {
   const [isInspectionModalOpen, setIsInspectionModalOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isPointImportExportModalOpen, setIsPointImportExportModalOpen] = useState<boolean>(false);
+  
+  // 新增：系统配置、待办主动推送与 AI 智选弹窗状态
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
+  const [isReminderModalOpen, setIsReminderModalOpen] = useState<boolean>(false);
+  const [isAIPlannerModalOpen, setIsAIPlannerModalOpen] = useState<boolean>(false);
+  const [aiPlannerInitialTab, setAiPlannerInitialTab] = useState<'select' | 'plan' | 'chat'>('select');
 
-  // 初始化加载本地离线存储数据
+  // 初始化加载本地离线存储数据与待办提醒
   const loadData = () => {
-    setPoints(StorageService.getPoints());
-    setPlans(StorageService.getPlans());
-    setCustomers(StorageService.getCustomers());
+    const loadedPoints = StorageService.getPoints();
+    const loadedPlans = StorageService.getPlans();
+    const loadedCustomers = StorageService.getCustomers();
+    const reminders = StorageService.getPendingReminders();
+
+    setPoints(loadedPoints);
+    setPlans(loadedPlans);
+    setCustomers(loadedCustomers);
+    setPendingReminders(reminders);
   };
 
   useEffect(() => {
     loadData();
+
+    // 首次进入系统检查是否需要主动弹出 Dashboard 待办事项提醒
+    const settings = StorageService.getSettings();
+    const reminders = StorageService.getPendingReminders();
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    if (
+      settings.enableDashboardPopupAlert &&
+      reminders.length > 0 &&
+      (!settings.autoDismissForToday || settings.lastDismissedDate !== todayStr)
+    ) {
+      // 稍微延迟 400ms 弹出以获得平滑视觉过渡
+      const timer = setTimeout(() => {
+        setIsReminderModalOpen(true);
+      }, 400);
+      return () => clearTimeout(timer);
+    }
 
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -216,6 +249,75 @@ export function App() {
     loadData();
   };
 
+  // 今日不再弹出待办提醒
+  const handleDismissRemindersForToday = () => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const settings = StorageService.getSettings();
+    StorageService.saveSettings({
+      ...settings,
+      autoDismissForToday: true,
+      lastDismissedDate: todayStr
+    });
+    setIsReminderModalOpen(false);
+  };
+
+  // 处理待办事项跳转
+  const handleReminderItemAction = (item: PendingReminderItem) => {
+    if (item.targetType === 'plan') {
+      const plan = plans.find(p => p.id === item.targetId);
+      setActiveTab('plans');
+      if (plan) {
+        setSelectedPlanForNotice(plan);
+      }
+    } else if (item.targetType === 'point') {
+      const point = points.find(p => p.id === item.targetId);
+      if (point) {
+        setSelectedPoint(point);
+        setIsInspectionModalOpen(true);
+      } else {
+        setActiveTab('points');
+      }
+    } else if (item.targetType === 'customer') {
+      setActiveTab('customers');
+    }
+  };
+
+  // 打开 AI 智选方案工作台
+  const handleOpenAISmartPlanner = (tab: 'select' | 'plan' | 'chat' = 'select') => {
+    setAiPlannerInitialTab(tab);
+    setIsAIPlannerModalOpen(true);
+  };
+
+  // 批量将点位加入选点中方案
+  const handleBatchAddPointsToActivePlan = (pointIds: string[]) => {
+    const openPlan = plans.find(p => p.status === '草稿' || p.status === '选点中');
+    if (openPlan) {
+      const newIds = pointIds.filter(id => !openPlan.pointIds.includes(id));
+      if (newIds.length === 0) {
+        alert('所推荐点位已全部存在于当前计划中');
+        return;
+      }
+      const addedSlots = points.filter(p => newIds.includes(p.id)).reduce((s, p) => s + (p.totalMedia || 1), 0);
+      const updatedPlan = {
+        ...openPlan,
+        pointIds: [...openPlan.pointIds, ...newIds],
+        totalSlots: openPlan.totalSlots + addedSlots
+      };
+      handleUpdatePlan(updatedPlan);
+      StorageService.batchUpdatePointStatus(newIds, '已选', {
+        planId: openPlan.id,
+        planName: openPlan.name,
+        customerId: openPlan.customerId,
+        customerName: openPlan.customerName
+      });
+      loadData();
+      alert(`已成功将 ${newIds.length} 个推荐点位批量加入计划《${openPlan.name}》`);
+    } else {
+      alert('暂无进行中的草稿/选点中计划，请先在“投放计划”中创建新方案。');
+      setActiveTab('plans');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-slate-800 flex flex-col font-sans antialiased">
       {/* 顶部主导航栏 */}
@@ -223,9 +325,13 @@ export function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pointsCount={points.length}
+        pendingRemindersCount={pendingReminders.length}
         onQuickInspect={() => setIsInspectionModalOpen(true)}
         onOpenBackup={() => setIsBackupModalOpen(true)}
         onOpenImportExport={() => setIsPointImportExportModalOpen(true)}
+        onOpenAIPlanner={() => handleOpenAISmartPlanner('select')}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenReminders={() => setIsReminderModalOpen(true)}
       />
 
       {/* 主视图展示区 */}
@@ -235,9 +341,17 @@ export function App() {
             points={points}
             plans={plans}
             customers={customers}
-            onNavigate={(tab) => setActiveTab(tab)}
+            pendingReminders={pendingReminders}
+            onNavigate={(tab) => setActiveTab(tab as any)}
             onSelectPoint={(point) => setSelectedPoint(point)}
-            onOpenInspectionModal={() => setIsInspectionModalOpen(true)}
+            onSelectPlan={(plan) => {
+              setSelectedPlanForNotice(plan);
+              setActiveTab('plans');
+            }}
+            onQuickInspect={() => setIsInspectionModalOpen(true)}
+            onOpenRemindersModal={() => setIsReminderModalOpen(true)}
+            onOpenAISmartPlanner={handleOpenAISmartPlanner}
+            onOpenSettings={() => setIsSettingsModalOpen(true)}
           />
         )}
 
@@ -401,6 +515,55 @@ export function App() {
           defaultTab="import"
         />
       )}
+
+      {/* 系统配置与提醒阈值管理弹窗 */}
+      <SystemSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        onSettingsSaved={() => {
+          loadData();
+        }}
+        onTriggerCheckReminders={() => {
+          const rems = StorageService.getPendingReminders();
+          setPendingReminders(rems);
+          if (rems.length > 0) {
+            setIsReminderModalOpen(true);
+          }
+        }}
+      />
+
+      {/* 业务待办到期与缺失巡检主动推送弹窗 */}
+      <DashboardReminderModal
+        isOpen={isReminderModalOpen}
+        reminders={pendingReminders}
+        onClose={() => setIsReminderModalOpen(false)}
+        onDismissForToday={handleDismissRemindersForToday}
+        onOpenSettings={() => {
+          setIsReminderModalOpen(false);
+          setIsSettingsModalOpen(true);
+        }}
+        onHandleReminder={handleReminderItemAction}
+        onOpenAISmartPlanner={() => {
+          setIsReminderModalOpen(false);
+          handleOpenAISmartPlanner('select');
+        }}
+      />
+
+      {/* AI 智能选点与方案定制工作台弹窗 */}
+      <AISmartPlannerModal
+        isOpen={isAIPlannerModalOpen}
+        onClose={() => setIsAIPlannerModalOpen(false)}
+        points={points}
+        plans={plans}
+        customers={customers}
+        initialTab={aiPlannerInitialTab}
+        onAddPointsToPlan={handleBatchAddPointsToActivePlan}
+        onJumpToMap={(point) => {
+          setSelectedPoint(point);
+          setActiveTab('map');
+        }}
+        onSelectPoint={(point) => setSelectedPoint(point)}
+      />
     </div>
   );
 }

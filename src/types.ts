@@ -201,3 +201,60 @@ export interface PointFilterState {
   nearbyRadiusKm?: number;
   centerCoordinate?: GeoCoordinate | null;
 }
+
+export interface SystemSettings {
+  // 提醒阈值配置
+  lockExpireThresholdDays: number; // 锁单到期前提前提醒天数（默认 3 天）
+  inspectionOverdueDays: number; // 巡检照片待补拍/超期阈值（默认 14 天）
+  customerProtectionThresholdDays: number; // 客户保护期到期预警天数（默认 15 天）
+
+  // 提醒弹窗与提示偏好
+  enableDashboardPopupAlert: boolean; // 进入看板时主动弹出待办事项
+  autoDismissForToday: boolean; // 是否在当日关闭后不再自动弹窗
+  lastDismissedDate?: string; // 上次关闭提示的日期
+
+  // AI 智能偏好配置
+  aiDefaultCity: string;
+  aiDefaultTargetCount: number;
+  aiDefaultBudget: number;
+  aiIndustryPreference: string;
+}
+
+export interface AIRecommendationItem {
+  pointId: string;
+  matchScore: number;
+  recommendReasons: string[];
+  targetMatchRate: string;
+  audienceHighlight?: string;
+}
+
+export interface AISmartSelectResult {
+  strategySummary: string;
+  totalEstimatedAudience?: string;
+  recommendedBudgetTotal?: number;
+  recommendations: AIRecommendationItem[];
+}
+
+export interface AIPlanMatchResult {
+  planTitle: string;
+  executiveSummary: string;
+  audienceStrategy: string;
+  mediaMixRatio: string;
+  creativeTips: string[];
+  flightScheduleTips?: string;
+  riskExclusionWarnings?: string[];
+  expectedReachMetric: string;
+}
+
+export interface PendingReminderItem {
+  id: string;
+  type: 'lock_expiring' | 'inspection_missing' | 'customer_protection';
+  title: string;
+  subtitle: string;
+  urgency: 'high' | 'medium' | 'low';
+  daysLeft?: number;
+  targetId: string;
+  targetType: 'plan' | 'point' | 'customer';
+  dateStr?: string;
+}
+
