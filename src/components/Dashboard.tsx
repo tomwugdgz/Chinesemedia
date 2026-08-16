@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Point, 
   Customer, 
   Plan, 
   MediaPhoto,
-  PendingReminderItem
+  PendingReminderItem,
+  PointStatus
 } from '../types';
 import { 
   Layers, 
@@ -27,8 +28,13 @@ import {
   AlertTriangle,
   Clock,
   Settings,
-  Bot
+  Bot,
+  FileText,
+  Download
 } from 'lucide-react';
+import { PointStatusDistributionChart } from './PointStatusDistributionChart';
+import { PointStatusTrendChart } from './PointStatusTrendChart';
+import { InventoryReportPdfModal } from './InventoryReportPdfModal';
 
 interface DashboardProps {
   points: Point[];
@@ -57,6 +63,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onOpenAISmartPlanner,
   onOpenSettings
 }) => {
+  const [isPdfReportModalOpen, setIsPdfReportModalOpen] = useState(false);
+
   // 统计指标
   const totalPoints = points.length;
   const availableCount = points.filter(p => p.status === '可选').length;
@@ -180,6 +188,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
           )}
 
           <button
+            id="dashboard-export-pdf-report-btn"
+            onClick={() => setIsPdfReportModalOpen(true)}
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all"
+            title="生成并导出管理层库存周报与流动性分析 PDF 文档"
+          >
+            <FileText className="w-4 h-4 text-emerald-100" />
+            <span>生成PDF库存报告</span>
+          </button>
+
+          <button
             id="dashboard-new-plan-btn"
             onClick={() => onNavigate('plans')}
             className="flex items-center space-x-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-sm transition-all"
@@ -292,6 +310,39 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <span>已授权客户: <strong className="text-indigo-700 font-semibold">{authCustomerCount}</strong> 家</span>
             <span className="text-indigo-600 font-semibold group-hover:underline">流程管理 &rarr;</span>
           </div>
+        </div>
+      </div>
+
+      {/* 资产库存状态分布与 30 天周转趋势双图表看板 */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-1">
+          <div className="flex items-center space-x-2">
+            <TrendingUp className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-base font-bold text-slate-900">
+              点位库存状态分布与 30 天周转趋势监控看板
+            </h2>
+          </div>
+          <button
+            id="dashboard-export-pdf-chart-btn"
+            onClick={() => setIsPdfReportModalOpen(true)}
+            className="self-start sm:self-auto flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs border border-indigo-200 transition-colors shadow-2xs cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>生成PDF库存报告</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
+          <PointStatusDistributionChart 
+            points={points} 
+            onNavigateToPoints={(status) => onNavigate('points')} 
+          />
+          <PointStatusTrendChart
+            points={points}
+            plans={plans}
+            onNavigateToPlans={() => onNavigate('plans')}
+            onNavigateToPoints={() => onNavigate('points')}
+          />
         </div>
       </div>
 
@@ -590,6 +641,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 导出 PDF 库存分析周报模态框 */}
+      <InventoryReportPdfModal
+        isOpen={isPdfReportModalOpen}
+        onClose={() => setIsPdfReportModalOpen(false)}
+        points={points}
+        customers={customers}
+        plans={plans}
+      />
     </div>
   );
 };

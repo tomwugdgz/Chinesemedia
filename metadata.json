@@ -1,6 +1,6 @@
 {
   "name": "户外社区媒体点位管理系统",
-  "description": "专业户外社区广告点位管理系统，支持地理位置标记、多媒体巡检记录、选点-锁点-发布工作流及离线数据查看。",
+  "description": "专业户外社区广告点位管理系统，集成 Recharts 点位库存状态分布与 30 天周转趋势折线图、一键生成与导出管理层 PDF 库存周报、地理空间标绘、多媒体巡检记录、选点-锁点-发布标准作业流与 AI 智选方案中枢。",
   "requestFramePermissions": ["geolocation", "camera", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
