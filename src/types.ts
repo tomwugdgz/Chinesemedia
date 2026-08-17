@@ -105,6 +105,12 @@ export interface Point {
   currentCustomerName?: string;
   lockExpireDate?: string;
   
+  // 待巡检标记与优先级
+  needsInspection?: boolean;
+  inspectionPriority?: 'high' | 'normal' | 'low';
+  inspectionDeadline?: string;
+  inspectionReason?: string; // 标记待巡检原因 (如: 新上画首检 / 客户报修 / 定期例行 / 画面异常复查)
+  
   // 多媒体记录
   photos: MediaPhoto[];
   voiceNotes: VoiceNote[];
@@ -256,5 +262,44 @@ export interface PendingReminderItem {
   targetId: string;
   targetType: 'plan' | 'point' | 'customer';
   dateStr?: string;
+}
+
+// ================= 最优巡检路线规划数据结构 =================
+export type TravelMode = 'ebike' | 'car' | 'walking';
+
+export interface InspectionRouteStop {
+  stopOrder: number; // 站点序号 (1, 2, 3...)
+  point: Point;
+  distanceFromPrevKm: number; // 距离上一站距离 (km)
+  accumulatedDistanceKm: number; // 累计行驶里程 (km)
+  travelMinutesFromPrev: number; // 从上一站出发路途耗时 (分钟)
+  accumulatedTravelMinutes: number; // 累计行驶总耗时 (分钟)
+  inspectionMinutes: number; // 本站巡检作业时长 (分钟)
+  estimatedArrivalTime: string; // 预计到达时刻 (如 "09:15")
+  estimatedDepartureTime: string; // 预计离开时刻 (如 "09:30")
+}
+
+export interface OptimalInspectionRoute {
+  stops: InspectionRouteStop[];
+  totalPoints: number;
+  totalDistanceKm: number;
+  totalTravelMinutes: number; // 纯在途耗时 (分钟)
+  totalInspectionMinutes: number; // 现场巡检耗时 (分钟)
+  totalDurationMinutes: number; // 总总耗时 (在途 + 巡检)
+  startTime: string; // 出发时间 (如 "09:00")
+  estimatedFinishTime: string; // 预计全线巡检结束时间 (如 "12:45")
+  travelMode: TravelMode;
+  startLocationName: string;
+  algorithmNote: string;
+}
+
+export interface RouteOptimizeOptions {
+  startFromCurrentGps?: boolean;
+  currentGpsCoord?: GeoCoordinate | null;
+  customStartPointId?: string;
+  travelMode?: TravelMode;
+  startTime?: string; // 默认 "09:00"
+  minutesPerInspection?: number; // 默认 15 分钟/点
+  returnToStart?: boolean; // 是否返回原点 (TSP 闭环 vs 开放路径，默认 false 开放单向最优)
 }
 

@@ -297,9 +297,63 @@ export const StorageService = {
     if (index !== -1) {
       const p = points[index];
       const inspections = [record, ...(p.inspections || [])];
-      points[index] = { ...p, inspections, updatedAt: new Date().toISOString() };
+      // 如果巡检正常，清除待巡检标记；若异常则保留待巡检复核
+      const isNormal = record.status === '正常完好';
+      points[index] = { 
+        ...p, 
+        inspections, 
+        needsInspection: !isNormal,
+        inspectionPriority: isNormal ? undefined : 'high',
+        inspectionReason: isNormal ? undefined : `现场巡检异常: ${record.status} (${record.note || '需工程跟进'})`,
+        updatedAt: new Date().toISOString() 
+      };
       this.savePoints(points);
     }
+  },
+
+  // 切换单个点位的待巡检标记
+  togglePointNeedsInspection(
+    pointId: string,
+    needsInspection?: boolean,
+    reason?: string,
+    priority: 'high' | 'normal' | 'low' = 'normal'
+  ): void {
+    const points = this.getPoints();
+    const index = points.findIndex(p => p.id === pointId);
+    if (index !== -1) {
+      const p = points[index];
+      const nextVal = typeof needsInspection === 'boolean' ? needsInspection : !p.needsInspection;
+      points[index] = {
+        ...p,
+        needsInspection: nextVal,
+        inspectionPriority: nextVal ? (priority || p.inspectionPriority || 'normal') : undefined,
+        inspectionReason: nextVal ? (reason || p.inspectionReason || '外勤人员手动加入巡检队列') : undefined,
+        updatedAt: new Date().toISOString()
+      };
+      this.savePoints(points);
+    }
+  },
+
+  // 批量设置点位待巡检标记
+  batchSetPointsNeedsInspection(
+    pointIds: string[],
+    needsInspection: boolean,
+    reason: string = '批量加入待巡检队列'
+  ): void {
+    const points = this.getPoints();
+    const updated = points.map(p => {
+      if (pointIds.includes(p.id)) {
+        return {
+          ...p,
+          needsInspection,
+          inspectionPriority: needsInspection ? (p.inspectionPriority || 'normal') : undefined,
+          inspectionReason: needsInspection ? reason : undefined,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return p;
+    });
+    this.savePoints(updated);
   },
 
   // 客户管理

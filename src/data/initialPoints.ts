@@ -40,6 +40,9 @@ export const INITIAL_POINTS: Point[] = [
     currentPlanName: '岚图汽车2026广州首发双周投放',
     currentCustomerId: 'cust-001',
     currentCustomerName: '东风岚图汽车科技有限公司',
+    needsInspection: true,
+    inspectionPriority: 'normal',
+    inspectionReason: '双周投放例行巡查与防损复核',
     photos: [
       {
         id: 'p-gz-1',
@@ -138,6 +141,9 @@ export const INITIAL_POINTS: Point[] = [
     currentPlanName: '岚图汽车2026广州首发双周投放',
     currentCustomerId: 'cust-001',
     currentCustomerName: '东风岚图汽车科技有限公司',
+    needsInspection: true,
+    inspectionPriority: 'high',
+    inspectionReason: '重点客户新上画首检，需补拍完整大框照',
     photos: [
       {
         id: 'p-gz-3',
@@ -194,6 +200,9 @@ export const INITIAL_POINTS: Point[] = [
     currentPlanName: '岚图汽车2026广州首发双周投放',
     currentCustomerId: 'cust-001',
     currentCustomerName: '东风岚图汽车科技有限公司',
+    needsInspection: true,
+    inspectionPriority: 'high',
+    inspectionReason: '新上画待留证拍照（琶洲核心板块）',
     photos: [],
     voiceNotes: [],
     inspections: []
@@ -311,6 +320,9 @@ export const INITIAL_POINTS: Point[] = [
     lat: 23.0458,
     lng: 113.3421,
     status: '可选',
+    needsInspection: true,
+    inspectionPriority: 'normal',
+    inspectionReason: '单元门智能屏设备例行通电检查与外框清洁',
     photos: [],
     voiceNotes: [],
     inspections: []
@@ -356,6 +368,9 @@ export const INITIAL_POINTS: Point[] = [
     currentCustomerId: 'cust-003',
     currentCustomerName: '招商银行股份有限公司上海分行',
     lockExpireDate: '2026-08-22',
+    needsInspection: true,
+    inspectionPriority: 'high',
+    inspectionReason: '招商银行锁单签约前点位完好性核查',
     photos: [
       {
         id: 'p-sh-1',
